@@ -30,6 +30,7 @@ import org.apache.hudi.common.fs.inline.InLineFileSystem;
 import org.apache.hudi.common.util.ClosableIterator;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.ParquetReaderIterator;
+import org.apache.hudi.internal.schema.InternalSchema;
 import org.apache.hudi.io.storage.HoodieParquetConfig;
 import org.apache.hudi.io.storage.HoodieParquetStreamWriter;
 import org.apache.parquet.avro.AvroParquetReader;
@@ -62,8 +63,8 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
                                 Option<Schema> readerSchema,
                                 Map<HeaderMetadataType, String> header,
                                 Map<HeaderMetadataType, String> footer,
-                                String keyField) {
-    super(content, inputStream, readBlockLazily, Option.of(logBlockContentLocation), readerSchema, header, footer, keyField, false);
+                                String keyField, InternalSchema internalSchema) {
+    super(content, inputStream, readBlockLazily, Option.of(logBlockContentLocation), readerSchema, header, footer, keyField, false, internalSchema);
 
     this.compressionCodecName = Option.empty();
   }
@@ -151,9 +152,15 @@ public class HoodieParquetDataBlock extends HoodieDataBlock {
         blockContentLoc.getContentPositionInLogFile(),
         blockContentLoc.getBlockSize());
 
+    Schema finalReadSchema = readerSchema;
+
+    if (!internalSchema.isEmptySchema()) {
+      finalReadSchema = getWriterSchema(super.getLogBlockHeader());
+    }
+
     return getProjectedParquetRecordsIterator(
         inlineConf,
-        readerSchema,
+        finalReadSchema,
         HadoopInputFile.fromPath(inlineLogFilePath, inlineConf));
   }
 
