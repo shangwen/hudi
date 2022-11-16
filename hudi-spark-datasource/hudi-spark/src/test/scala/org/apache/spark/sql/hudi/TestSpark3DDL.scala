@@ -571,4 +571,38 @@ class TestSpark3DDL extends HoodieSparkSqlTestBase {
       }
     }
   }
+
+  test("Test schema evolution in parquet data block format mode") {
+    withTempDir { tmp =>
+      val tableName = generateTableName
+      val tablePath = s"${new Path(tmp.getCanonicalPath, tableName).toUri.toString}"
+      val tableType = "mor"
+      if (HoodieSparkUtils.gteqSpark3_1) {
+        spark.sql("set hoodie.schema.on.read.enable=true")
+        spark.sql("set hoodie.logfile.data.block.format=parquet")
+        spark.sql(
+          s"""
+             |create table $tableName (
+             |  id int,
+             |  col1 string,
+             |  col2 string,
+             |  ts long
+             |) using hudi
+             | location '$tablePath'
+             | options (
+             |  type = '$tableType',
+             |  primaryKey = 'id',
+             |  preCombineField = 'ts'
+             | )
+           """.stripMargin)
+        spark.sql(s"show create table ${tableName}").show(false)
+        spark.sql(s"insert into ${tableName} values (1, 'aaa', 'bbb', 1000)")
+        spark.sql(s"update ${tableName} set col1 = 'AAA' where id = 1")
+        spark.sql(s"alter table ${tableName} rename column col1 to col3")
+
+        checkAnswer(spark.sql(s"select id, col3, col2, ts from ${tableName}").collect())(
+          Seq(1, "AAA", "bbb", 1000))
+      }
+    }
+  }
 }
